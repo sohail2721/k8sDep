@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
+
+      - name: Install dependencies
+        run: |
+          pip install flake8
+
+      - name: Lint Python code
+        run: flake8 .
+
+      - name: Build Docker image
+        run: docker build -t test-image .
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
+
+      - name: Lint Python code
+        run: |
+          pip install flake8
+          flake8 .
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Set Docker image tag
+        id: vars
+        run: echo "tag=mlopsa1-web:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: docker build -t ${{ steps.vars.outputs.tag }} .
+
+      - name: Push Docker image
+        run: docker push ${{ steps.vars.outputs.tag }}
+
+      - name: Update Kubernetes manifest
+        run: |
+          sed -i "s|image:.*|image: ${{ steps.vars.outputs.tag }}|" k8s/deployment.yaml
+
+      - name: Apply Kubernetes Deployment
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+            
