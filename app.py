@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, request, redirect, url_for
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from bson.objectid import ObjectId  # Corrected E402: Move imports to the top
 
 # Load environment variables
 load_dotenv()
@@ -40,7 +41,6 @@ def delete_task(task_id):
     tasks_collection.delete_one({'_id': ObjectId(task_id)})
     return redirect(url_for('index'))
 
-from bson.objectid import ObjectId
 
 if __name__ == '__main__':
     app.run(debug=True)
